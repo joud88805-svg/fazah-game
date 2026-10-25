@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#f5dfb8">
+<title>فزعة 🇸🇦 — تحدي الصحراء</title>
+<style>
+:root{--ink:#123b2a;--sand:#e7f1e8;--cream:#f8fff8;--brown:#087443;--red:#b93d35}
+*{box-sizing:border-box}body{margin:0;background:var(--sand);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;text-align:center}
+main{max-width:520px;margin:auto;padding:14px}
+h1{margin:8px 0;font-size:clamp(27px,7vw,40px)}h2{margin:8px 0}
+.sub{margin:4px 0 18px}
+.panel{background:var(--cream);border:2px solid var(--ink);border-radius:20px;padding:16px;margin:12px 0;box-shadow:0 4px 0 #a8cdb5}
+button,input{font:inherit;border-radius:13px;border:2px solid var(--ink);padding:12px}
+button{background:var(--brown);color:white;font-weight:800;cursor:pointer}
+button:disabled{opacity:.5;cursor:default}
+input{width:100%;background:white;color:var(--ink);margin:6px 0 10px}
+.row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.pick{flex:1;min-width:125px;background:#e2f2e6;color:var(--ink);font-size:18px;padding:15px 8px}
+.pick.selected{outline:4px solid #d4af37;background:#c8ead2}
+.avatar{display:block;font-size:55px;margin:5px}
+.hidden{display:none!important}
+.stats{display:flex;justify-content:space-between;gap:8px;font-weight:800;margin:8px 0}
+canvas{display:block;width:100%;height:auto;border:3px solid var(--ink);border-radius:18px;background:#d7f0e0;touch-action:none}
+.controls{display:flex;gap:12px;justify-content:center;margin:10px 0}
+.controls button{flex:1;max-width:140px;font-size:22px}
+.note{font-size:13px;opacity:.8;line-height:1.6}
+.tabs{display:flex;gap:8px}.tabs button{flex:1}.tabs .active{background:#d4af37;color:#123b2a}
+ol{padding-right:28px;text-align:right;margin-bottom:0}
+li{padding:7px 2px;border-bottom:1px dashed #d9c6a7}
+.place{display:inline-block;min-width:30px;font-weight:900}
+.status{min-height:24px;font-weight:700}
+</style>
+</head>
+<body>
+<main>
+  <h1>🇸🇦 فزعة</h1>
+  <p class="sub">تحدّي الصحراء: تفادي الصواريخ والمسيّرات 😂</p>
+
+  <section id="setup" class="panel">
+    <h2>اختاري شخصيتك</h2>
+    <div class="row">
+      <button class="pick selected" data-character="boy"><span class="avatar">👳🏻‍♂️</span>ولد بالثوب والشماغ</button>
+      <button class="pick" data-character="girl"><span class="avatar">🧕🏻</span>بنت بالعباية</button>
+    </div>
+    <label for="nickname">اسم مستعار (بدون حساب)</label>
+    <input id="nickname" maxlength="18" placeholder="مثال: أميرة الصحراء" autocomplete="nickname">
+    <button id="play" style="width:100%">يلا نبدأ! 🚀</button>
+    <p class="note">لا تكتبين اسمك الكامل أو أي معلومات شخصية.</p>
+  </section>
+
+  <section id="playArea" class="hidden">
+    <div class="stats"><span id="score">النقاط: 0</span><span id="time">الوقت: 0ث</span></div>
+    <canvas id="game" width="360" height="500" aria-label="لعبة تفادي العوائق"></canvas>
+    <div class="controls">
+      <button id="left" aria-label="تحرك يسار">⬅️</button>
+      <button id="right" aria-label="تحرك يمين">➡️</button>
+    </div>
+    <p class="note">حرّكي الشخصية بالأزرار أو اسحبي إصبعك على ساحة اللعب.</p>
+    <div id="result" class="panel hidden">
+      <h2>يا ساتر! 😂</h2><p id="resultText"></p>
+      <button id="again">جولة ثانية</button>
+      <button id="toBoard">شوفي الترتيب 🏆</button>
+    </div>
+  </section>
+
+  <section id="leaderboard" class="panel">
+    <h2>🏆 لوحة الأبطال</h2>
+    <div class="tabs"><button id="dailyTab" class="active">ترتيب اليوم</button><button id="allTab">الترتيب العام</button></div>
+    <p id="boardStatus" class="status">أضيفي إعدادات قاعدة البيانات لتفعيل الترتيب المشترك.</p>
+    <ol id="scoresList"><li>لا توجد نتائج للعرض بعد.</li></ol>
+    <button id="refresh" style="margin-top:12px">تحديث الترتيب</button>
+  </section>
+  <p class="note">نسخة أولية للعبة. الترتيب المشترك يحتاج إعداد Supabase كما هو موضح في ملف التعليمات.</p>
+</main>
+<script>
+/*
+  1) أنشئي مشروعًا مجانيًا على https://supabase.com
+  2) نفّذي SQL الموجود في README.txt
+  3) ضعي Project URL و anon/public key هنا.
+*/
+const SUPABASE_URL = "PASTE_YOUR_SUPABASE_PROJECT_URL";
+const SUPABASE_KEY = "PASTE_YOUR_SUPABASE_ANON_KEY";
+
+const $ = id => document.getElementById(id);
+let character = "boy", nickname = "", score = 0, startedAt = 0, elapsed = 0;
+let running = false, raf = 0, frame = 0, move = 0, hazards = [], playerX = 163;
+let boardMode = "daily";
+const canvas = $("game"), ctx = canvas.getContext("2d");
+const playerEmoji = () => character === "boy" ? "👳🏻‍♂️" : "🧕🏻";
+const backendReady = () => SUPABASE_URL.startsWith("https://") && !SUPABASE_URL.includes("PASTE_") && SUPABASE_KEY.length > 30 && !SUPABASE_KEY.includes("PASTE_");
+
+document.querySelectorAll(".pick").forEach(btn => btn.addEventListener("click", () => {
+  character = btn.dataset.character;
+  document.querySelectorAll(".pick").forEach(b => b.classList.toggle("selected", b === btn));
+}));
+
+$("play").addEventListener("click", () => {
+  nickname = $("nickname").value.trim().replace(/\s+/g, " ");
+  if (!nickname) { $("nickname").focus(); alert("اكتبي اسمًا مستعارًا أولًا 😊"); return; }
+  nickname = nickname.slice(0,18);
+  $("setup").classList.add("hidden"); $("leaderboard").classList.add("hidden");
+  $("playArea").classList.remove("hidden"); $("result").classList.add("hidden");
+  startGame();
+});
+$("again").addEventListener("click", startGame);
+$("toBoard").addEventListener("click", async () => {
+  $("playArea").classList.add("hidden"); $("leaderboard").classList.remove("hidden");
+  await loadBoard();
+});
+$("dailyTab").addEventListener("click", () => setBoardMode("daily"));
+$("allTab").addEventListener("click", () => setBoardMode("all"));
+$("refresh").addEventListener("click", loadBoard);
+
+function setBoardMode(mode) {
+  boardMode = mode;
+  $("dailyTab").classList.toggle("active", mode === "daily");
+  $("allTab").classList.toggle("active", mode === "all");
+  loadBoard();
+}
+function startGame() {
+  cancelAnimationFrame(raf); score=0; frame=0; hazards=[]; playerX=163; move=0;
+  startedAt=performance.now(); elapsed=0; running=true;
+  $("result").classList.add("hidden"); $("score").textContent="النقاط: 0";
+  $("time").textContent="الوقت: 0ث"; draw(); loop();
+}
+function draw() {
+  ctx.clearRect(0,0,360,500);
+  const sky=ctx.createLinearGradient(0,0,0,500);
+  sky.addColorStop(0,"#b9e5cc"); sky.addColorStop(.68,"#e4f2d5"); sky.addColorStop(1,"#a8d6ae");
+  ctx.fillStyle=sky; ctx.fillRect(0,0,360,500);
+  ctx.fillStyle="#fff2d7"; ctx.beginPath(); ctx.arc(300,65,25,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle="#8fbd91";
+  ctx.beginPath();ctx.moveTo(0,260);ctx.lineTo(55,210);ctx.lineTo(105,258);ctx.lineTo(170,205);ctx.lineTo(240,260);ctx.lineTo(310,220);ctx.lineTo(360,260);ctx.lineTo(360,500);ctx.lineTo(0,500);ctx.fill();
+  ctx.strokeStyle="#78ad7f";ctx.lineWidth=2;
+  for(let i=0;i<6;i++){ctx.beginPath();ctx.moveTo(i*75-30,500);ctx.lineTo(180+(i-3)*12,270);ctx.stroke();}
+  ctx.textAlign="center";ctx.font="34px system-ui";
+  ctx.fillText("🌴",35,270);ctx.fillText("🌵",325,280);
+  ctx.font="35px system-ui";ctx.fillText(playerEmoji(),playerX+17,430);
+  hazards.forEach(h=>{ctx.font="30px system-ui";ctx.fillText(h.kind,h.x,h.y);});
+}
+function loop() {
+  if(!running)return;
+  frame++; elapsed=Math.floor((performance.now()-startedAt)/1000);
+  playerX=Math.max(2,Math.min(324,playerX+move*4.6));
+  const rate=Math.max(24,55-Math.floor(score/5));
+  if(frame%rate===0) hazards.push({x:18+Math.random()*324,y:-15,kind:Math.random()<.65?"🚀":"🛸",speed:2.8+Math.min(4,score*.035)});
+  hazards=hazards.filter(h=>{
+    h.y+=h.speed;
+    if(h.y>520){score++;$("score").textContent="النقاط: "+score;return false;}
+    if(h.y>390 && h.y<445 && Math.abs(h.x-(playerX+17))<27){endGame();return false;}
+    return true;
+  });
+  $("time").textContent="الوقت: "+elapsed+"ث";
+  draw();
+  if(running)raf=requestAnimationFrame(loop);
+}
+async function endGame() {
+  running=false;cancelAnimationFrame(raf);
+  $("result").classList.remove("hidden");
+  $("resultText").textContent=`${nickname}، جمعتي ${score} نقطة وصمدتي ${elapsed} ثانية.`;
+  if(backendReady()) {
+    $("resultText").textContent += " نحفظ نتيجتك...";
+    const ok=await submitScore();
+    $("resultText").textContent = `${nickname}، نتيجتك ${score} نقطة وصمدتي ${elapsed} ثانية.` + (ok?" تم حفظ النتيجة! 🏆":" تعذّر حفظ النتيجة؛ تأكدي من إعدادات قاعدة البيانات.");
+  } else {
+    $("resultText").textContent += " لتسجيلها في الترتيب المشترك، أكملي إعداد Supabase في الكود.";
+  }
+  draw();
+}
+async function submitScore() {
+  try {
+    const res=await fetch(`${SUPABASE_URL}/rest/v1/scores`,{
+      method:"POST",headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,"Content-Type":"application/json","Prefer":"return=minimal"},
+      body:JSON.stringify({nickname,character,score,seconds:elapsed})
+    });
+    return res.ok;
+  } catch(e){return false;}
+}
+async function loadBoard() {
+  $("scoresList").innerHTML="";
+  if(!backendReady()) {
+    $("boardStatus").textContent="الترتيب المشترك يتفعّل بعد إضافة مفاتيح Supabase.";
+    $("scoresList").innerHTML="<li>بعد الإعداد ستظهر أفضل النتائج هنا.</li>";return;
+  }
+  $("boardStatus").textContent="جاري تحميل النتائج...";
+  try {
+    let url=`${SUPABASE_URL}/rest/v1/scores?select=nickname,character,score,seconds,created_at&order=score.desc,seconds.desc&limit=10`;
+    if(boardMode==="daily") {
+      const now=new Date(); const midnight=new Date(now.getFullYear(),now.getMonth(),now.getDate()).toISOString();
+      url+=`&created_at=gte.${encodeURIComponent(midnight)}`;
+    }
+    const res=await fetch(url,{headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`}});
+    if(!res.ok)throw new Error("request failed");
+    const rows=await res.json();
+    $("boardStatus").textContent=boardMode==="daily"?"أفضل نتائج اليوم":"أفضل النتائج العامة";
+    if(!rows.length){$("scoresList").innerHTML="<li>ما فيه نتائج للحين، كوني أول بطلة! 🌟</li>";return;}
+    rows.forEach((r,i)=>{
+      const li=document.createElement("li");
+      const icon=r.character==="boy"?"👳🏻‍♂️":"🧕🏻";
+      li.innerHTML=`<span class="place">${["🥇","🥈","🥉"][i]||`${i+1}.`}</span> ${icon} <strong></strong> — ${r.score} نقطة <small>(${r.seconds}ث)</small>`;
+      li.querySelector("strong").textContent=r.nickname;
+      $("scoresList").appendChild(li);
+    });
+  } catch(e) {
+    $("boardStatus").textContent="ما قدرنا نحمل النتائج. تأكدي من إعدادات Supabase وسياسات الجدول.";
+    $("scoresList").innerHTML="<li>حاولي التحديث بعد مراجعة التعليمات.</li>";
+  }
+}
+function setMove(v){move=v;}
+$("left").addEventListener("pointerdown",()=>setMove(-1));
+$("right").addEventListener("pointerdown",()=>setMove(1));
+["left","right"].forEach(id=>["pointerup","pointerleave","pointercancel"].forEach(ev=>$(id).addEventListener(ev,()=>setMove(0))));
+canvas.addEventListener("pointerdown",e=>{canvas.setPointerCapture(e.pointerId);});
+canvas.addEventListener("pointermove",e=>{
+  if(!running || e.buttons===0)return;
+  const r=canvas.getBoundingClientRect();playerX=Math.max(0,Math.min(324,(e.clientX-r.left)*360/r.width-17));
+});
+draw();
+loadBoard();
+</script>
+</body>
+</html>
